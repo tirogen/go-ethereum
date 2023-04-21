@@ -237,7 +237,6 @@ type TypedDataDomain struct {
 	Version           string                `json:"version"`
 	ChainId           *math.HexOrDecimal256 `json:"chainId"`
 	VerifyingContract string                `json:"verifyingContract"`
-	Salt              string                `json:"salt"`
 }
 
 // TypedDataAndHash is a helper function that calculates a hash for typed data conforming to EIP-712.
@@ -773,7 +772,7 @@ func isPrimitiveTypeValid(primitiveType string) bool {
 // validate checks if the given domain is valid, i.e. contains at least
 // the minimum viable keys and values
 func (domain *TypedDataDomain) validate() error {
-	if domain.ChainId == nil && len(domain.Name) == 0 && len(domain.Version) == 0 && len(domain.VerifyingContract) == 0 && len(domain.Salt) == 0 {
+	if domain.ChainId == nil && len(domain.Name) == 0 && len(domain.Version) == 0 && len(domain.VerifyingContract) == 0 {
 		return errors.New("domain is undefined")
 	}
 
@@ -800,9 +799,6 @@ func (domain *TypedDataDomain) Map() map[string]interface{} {
 		dataMap["verifyingContract"] = domain.VerifyingContract
 	}
 
-	if len(domain.Salt) > 0 {
-		dataMap["salt"] = domain.Salt
-	}
 	return dataMap
 }
 
