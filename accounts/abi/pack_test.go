@@ -203,7 +203,7 @@ func TestPackNumber(t *testing.T) {
 		{reflect.ValueOf(int64(math.MinInt64)), common.Hex2Bytes("ffffffffffffffffffffffffffffffffffffffffffffffff8000000000000000")},
 	}
 	for i, tt := range tests {
-		packed := packNum(tt.value)
+		packed, _ := packNum(tt.value)
 		if !bytes.Equal(packed, tt.packed) {
 			t.Errorf("test %d: pack mismatch: have %x, want %x", i, packed, tt.packed)
 		}

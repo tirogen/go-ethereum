@@ -270,9 +270,9 @@ func (t Type) String() (out string) {
 func (t Type) pack(v reflect.Value) ([]byte, error) {
 	// dereference pointer first if it's a pointer
 	v = indirect(v)
-	if err := typeCheck(t, v); err != nil {
-		return nil, err
-	}
+	// if err := typeCheck(t, v); err != nil {
+	// 	return nil, err
+	// }
 
 	switch t.T {
 	case SliceTy, ArrayTy:
@@ -280,7 +280,11 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 
 		if t.requiresLengthPrefix() {
 			// append length
-			ret = append(ret, packNum(reflect.ValueOf(v.Len()))...)
+			p, err := packNum(reflect.ValueOf(v.Len()))
+			if err != nil {
+				return nil, err
+			}
+			ret = append(ret, p...)
 		}
 
 		// calculate offset if any
@@ -299,7 +303,11 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 				ret = append(ret, val...)
 				continue
 			}
-			ret = append(ret, packNum(reflect.ValueOf(offset))...)
+			p, err := packNum(reflect.ValueOf(offset))
+			if err != nil {
+				return nil, err
+			}
+			ret = append(ret, p...)
 			offset += len(val)
 			tail = append(tail, val...)
 		}
@@ -334,7 +342,11 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 				return nil, err
 			}
 			if isDynamicType(*elem) {
-				ret = append(ret, packNum(reflect.ValueOf(offset))...)
+				p, err := packNum(reflect.ValueOf(offset))
+				if err != nil {
+					return nil, err
+				}
+				ret = append(ret, p...)
 				tail = append(tail, val...)
 				offset += len(val)
 			} else {

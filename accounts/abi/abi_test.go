@@ -1192,3 +1192,26 @@ func TestUnpackRevert(t *testing.T) {
 		})
 	}
 }
+
+func TestPackAutoType(t *testing.T) {
+	abiJSON := `[{"inputs":[{"internalType":"address","name":"creator","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"string","name":"uri","type":"string"},{"internalType":"uint96","name":"royaltyBPS","type":"uint96"}],"stateMutability":"nonpayable","type":"function","name":"mintThenTransfer","outputs":[{"internalType":"uint256","name":"_tokenID","type":"uint256"},{"internalType":"uint256","name":"_gasAfterMint","type":"uint256"}]}]`
+	contractAbi, err := JSON(strings.NewReader(abiJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := contractAbi.Pack(
+		"mintThenTransfer",
+		common.HexToAddress("0x0000000000000000000000000000000000000001"),
+		"0x0000000000000000000000000000000000000002",
+		"ipfs_url",
+		"3000",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(data, common.Hex2Bytes("dff856e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000bb80000000000000000000000000000000000000000000000000000000000000008697066735f75726c000000000000000000000000000000000000000000000000")) {
+		t.Fatalf("Output mismatch")
+	}
+}
