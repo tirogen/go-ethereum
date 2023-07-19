@@ -19,7 +19,6 @@ package t8ntool
 import (
 	"fmt"
 	"math/big"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -125,7 +124,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	}
 	var (
 		statedb     = MakePreState(rawdb.NewMemoryDatabase(), pre.Pre)
-		signer      = types.MakeSigner(chainConfig, new(big.Int).SetUint64(pre.Env.Number))
+		signer      = types.MakeSigner(chainConfig, new(big.Int).SetUint64(pre.Env.Number), pre.Env.Timestamp)
 		gaspool     = new(core.GasPool)
 		blockHash   = common.Hash{0x13, 0x37}
 		rejectedTxs []*rejectedTx
@@ -240,7 +239,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	if miningReward >= 0 {
 		// Add mining reward. The mining reward may be `0`, which only makes a difference in the cases
 		// where
-		// - the coinbase suicided, or
+		// - the coinbase self-destructed, or
 		// - there are only 'bad' transactions, which aren't executed. In those cases,
 		//   the coinbase gets no txfee, so isn't created, and thus needs to be touched
 		var (
@@ -269,7 +268,6 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 	// Commit block
 	root, err := statedb.Commit(chainConfig.IsEIP158(vmContext.BlockNumber))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not commit state: %v", err)
 		return nil, nil, NewError(ErrorEVM, fmt.Errorf("could not commit state: %v", err))
 	}
 	execRs := &ExecutionResult{
@@ -288,12 +286,18 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig,
 		h := types.DeriveSha(types.Withdrawals(pre.Env.Withdrawals), trie.NewStackTrie(nil))
 		execRs.WithdrawalsRoot = &h
 	}
+	// Re-create statedb instance with new root upon the updated database
+	// for accessing latest states.
+	statedb, err = state.New(root, statedb.Database(), nil)
+	if err != nil {
+		return nil, nil, NewError(ErrorEVM, fmt.Errorf("could not reopen state: %v", err))
+	}
 	return statedb, execRs, nil
 }
 
 func MakePreState(db ethdb.Database, accounts core.GenesisAlloc) *state.StateDB {
 	sdb := state.NewDatabaseWithConfig(db, &trie.Config{Preimages: true})
-	statedb, _ := state.New(common.Hash{}, sdb, nil)
+	statedb, _ := state.New(types.EmptyRootHash, sdb, nil)
 	for addr, a := range accounts {
 		statedb.SetCode(addr, a.Code)
 		statedb.SetNonce(addr, a.Nonce)
