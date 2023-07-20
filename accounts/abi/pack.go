@@ -43,10 +43,14 @@ func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 	case IntTy, UintTy:
 		return packNum(reflectValue)
 	case StringTy:
-		return packBytesSlice([]byte(reflectValue.String()), reflectValue.Len())
+		v, ok := reflectValue.Interface().(string)
+		if !ok {
+			return []byte{}, errors.New("String type is not string")
+		}
+		return packBytesSlice([]byte(v), len(v))
 	case AddressTy:
-		if reflectValue.Type() == reflect.TypeOf("") {
-			addr := reflectValue.String()
+		addr, isStr := reflectValue.Interface().(string)
+		if isStr {
 			reflectValue = reflect.ValueOf(common.HexToAddress(addr))
 			if addr != "0x0000000000000000000000000000000000000000" {
 				if reflectValue.Interface().(common.Address).Hex() != addr {
@@ -59,7 +63,16 @@ func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 			reflectValue = mustArrayToByteSlice(reflectValue)
 		}
 
-		return common.LeftPadBytes(reflectValue.Bytes(), 32), nil
+		v, ok := reflectValue.Interface().([]uint8)
+		if !ok {
+			b, ok := reflectValue.Interface().(common.Address)
+			if !ok {
+				return []byte{}, fmt.Errorf("Could not pack element, invalid address: %v", reflectValue.Interface())
+			}
+			v = b.Bytes()
+		}
+
+		return common.LeftPadBytes(v, 32), nil
 	case BoolTy:
 		if reflectValue.Bool() {
 			return math.PaddedBigBytes(common.Big1, 32), nil
@@ -95,10 +108,33 @@ func packNum(value reflect.Value) ([]byte, error) {
 	case reflect.String:
 		bn, ok := new(big.Int).SetString(value.Interface().(string), 10)
 		if !ok {
-			return []byte{}, fmt.Errorf("Could not pack number, invalid string: %v", value.Interface().(string))
+			return []byte{}, fmt.Errorf("Could not pack number in packNum, invalid string: %v", value.Interface().(string))
 		}
 		return math.U256Bytes(bn), nil
 	default:
-		return []byte{}, fmt.Errorf("Could not pack number, unknown kind: %v", kind)
+		if v, ok := value.Interface().(*big.Int); ok {
+			return math.U256Bytes(v), nil
+		}
+		bn, err := toBigInt(value.Interface())
+		if err != nil {
+			return []byte{}, fmt.Errorf("Could not pack number in packNum, invalid type: %v, %v", kind, err)
+		}
+		return math.U256Bytes(bn), nil
 	}
+}
+
+func toBigInt(value any) (*big.Int, error) {
+	switch v := value.(type) {
+	case int:
+		return big.NewInt(int64(v)), nil
+	case int64:
+		return big.NewInt(v), nil
+	case string:
+		bigIntValue := new(big.Int)
+		_, ok := bigIntValue.SetString(v, 10)
+		if ok {
+			return bigIntValue, nil
+		}
+	}
+	return nil, fmt.Errorf("Cannot convert to *big.Int")
 }

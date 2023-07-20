@@ -1215,3 +1215,78 @@ func TestPackAutoType(t *testing.T) {
 		t.Fatalf("Output mismatch")
 	}
 }
+
+func TestPackAutoType2(t *testing.T) {
+	abiJSON := `[{"inputs":[{"internalType":"address","name":"to","type":"address"},{"components":[{"internalType":"uint256","name":"tokenID","type":"uint256"},{"internalType":"addresspayable","name":"creator","type":"address"},{"internalType":"uint256","name":"expirationTime","type":"uint256"},{"internalType":"uint96","name":"royaltyBPS","type":"uint96"},{"internalType":"string","name":"uri","type":"string"}],"internalType":"structCoralNFT721.MintAndTransferVoucher","name":"voucher","type":"tuple"},{"internalType":"bytes","name":"signature","type":"bytes"}],"name":"mintAndTransferVoucher","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
+	contractAbi, err := JSON(strings.NewReader(abiJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect := common.Hex2Bytes("a5fb825d000000000000000000000000d66f7415b641304abcf04ad698b04e2e76d06795000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000cbd6d31584f8e515397f9000000000000000000000000bd6d31584f8e515397f95196263d399c67f9271100000000000000000000000000000000000000000000000000000000684fe24f00000000000000000000000000000000000000000000000000000000000003e800000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000002e516d654c316e7236555335787155774e4d346558746266616374666e6f4c437866744e78754551374148336648590000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c00000000000000000000000000000000000000000000000000000000000000")
+
+	tokenID, _ := new(big.Int).SetString("15401651351421325860378617", 10)
+
+	voucher := struct {
+		TokenID        *big.Int
+		Creator        common.Address
+		ExpirationTime *big.Int
+		RoyaltyBPS     *big.Int
+		Uri            string
+	}{
+		TokenID:        tokenID,
+		Creator:        common.HexToAddress("0xBD6D31584f8E515397f95196263d399C67F92711"),
+		ExpirationTime: big.NewInt(1750065743),
+		RoyaltyBPS:     big.NewInt(1000),
+		Uri:            "QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
+	}
+	data, err := contractAbi.Pack(
+		"mintAndTransferVoucher",
+		common.HexToAddress("0xd66f7415b641304aBCf04AD698B04E2E76d06795"),
+		voucher,
+		common.Hex2Bytes("349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, expect) {
+		t.Fatalf("Output mismatch")
+	}
+
+	data, err = contractAbi.Pack(
+		"mintAndTransferVoucher",
+		"0xd66f7415b641304aBCf04AD698B04E2E76d06795",
+		[]any{
+			tokenID,
+			"0xBD6D31584f8E515397f95196263d399C67F92711",
+			"1750065743",
+			1000,
+			"QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
+		},
+		common.Hex2Bytes("349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, expect) {
+		t.Fatalf("Output mismatch")
+	}
+
+	data, err = contractAbi.Pack(
+		"mintAndTransferVoucher",
+		"0xd66f7415b641304aBCf04AD698B04E2E76d06795",
+		[]any{
+			"15401651351421325860378617",
+			"0xBD6D31584f8E515397f95196263d399C67F92711",
+			"1750065743",
+			"1000",
+			"QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
+		},
+		common.Hex2Bytes("349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, expect) {
+		t.Fatalf("Output mismatch")
+	}
+}
