@@ -19,6 +19,7 @@ package abi
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -1271,7 +1272,7 @@ func TestPackAutoType2(t *testing.T) {
 		t.Fatalf("Output mismatch")
 	}
 
-	data, err = contractAbi.Pack(
+	arr := []any{
 		"mintAndTransferVoucher",
 		"0xd66f7415b641304aBCf04AD698B04E2E76d06795",
 		[]any{
@@ -1281,8 +1282,25 @@ func TestPackAutoType2(t *testing.T) {
 			"1000",
 			"QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
 		},
-		common.Hex2Bytes("349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c"),
-	)
+		"349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c",
+	}
+	data, err = contractAbi.Pack(arr[0].(string), arr[1:]...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, expect) {
+		t.Fatalf("Output mismatch")
+	}
+
+	out, err := json.Marshal(arr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var arr2 []any
+	if err := json.Unmarshal(out, &arr2); err != nil {
+		t.Fatal(err)
+	}
+	data, err = contractAbi.Pack(arr2[0].(string), arr2[1:]...)
 	if err != nil {
 		t.Fatal(err)
 	}

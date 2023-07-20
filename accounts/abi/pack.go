@@ -83,7 +83,12 @@ func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 			reflectValue = mustArrayToByteSlice(reflectValue)
 		}
 		if reflectValue.Type() != reflect.TypeOf([]byte{}) {
-			return []byte{}, errors.New("Bytes type is neither slice nor array")
+			str, ok := reflectValue.Interface().(string)
+			if !ok {
+				return []byte{}, errors.New("Bytes type is neither slice nor array")
+			}
+			val := common.Hex2Bytes(str)
+			return packBytesSlice(val, len(val))
 		}
 		return packBytesSlice(reflectValue.Bytes(), reflectValue.Len())
 	case FixedBytesTy, FunctionTy:
