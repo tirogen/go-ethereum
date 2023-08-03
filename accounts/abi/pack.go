@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -53,7 +54,7 @@ func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 		if isStr {
 			reflectValue = reflect.ValueOf(common.HexToAddress(addr))
 			if addr != "0x0000000000000000000000000000000000000000" {
-				if reflectValue.Interface().(common.Address).Hex() != addr {
+				if strings.ToLower(reflectValue.Interface().(common.Address).Hex()) != strings.ToLower(addr) {
 					return []byte{}, fmt.Errorf("Could not pack element, invalid address: %v", addr)
 				}
 			}
