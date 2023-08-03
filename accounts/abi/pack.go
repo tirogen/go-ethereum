@@ -111,6 +111,11 @@ func packNum(value reflect.Value) ([]byte, error) {
 		return math.U256Bytes(big.NewInt(value.Int())), nil
 	case reflect.Ptr:
 		return math.U256Bytes(new(big.Int).Set(value.Interface().(*big.Int))), nil
+	case reflect.Float64:
+		bigFloat := new(big.Float).SetFloat64(value.Float())
+		bigInt := new(big.Int)
+		bigFloat.Int(bigInt)
+		return math.U256Bytes(bigInt), nil
 	case reflect.String:
 		bn, ok := new(big.Int).SetString(value.Interface().(string), 10)
 		if !ok {
