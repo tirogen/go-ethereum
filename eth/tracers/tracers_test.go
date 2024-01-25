@@ -79,7 +79,9 @@ func BenchmarkTransactionTrace(b *testing.B) {
 		Code:    []byte{},
 		Balance: big.NewInt(500000000000000),
 	}
-	_, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), alloc, false)
+	triedb, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), alloc, false, rawdb.HashScheme)
+	defer triedb.Close()
+
 	// Create the tracer, the EVM environment and run it
 	tracer := logger.NewStructLogger(&logger.Config{
 		Debug: false,
@@ -88,7 +90,7 @@ func BenchmarkTransactionTrace(b *testing.B) {
 		//EnableReturnData: false,
 	})
 	evm := vm.NewEVM(context, txContext, statedb, params.AllEthashProtocolChanges, vm.Config{Tracer: tracer})
-	msg, err := core.TransactionToMessage(tx, signer, nil)
+	msg, err := core.TransactionToMessage(tx, signer, context.BaseFee)
 	if err != nil {
 		b.Fatalf("failed to prepare transaction for tracing: %v", err)
 	}

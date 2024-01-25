@@ -20,6 +20,7 @@ package kzg4844
 import (
 	"embed"
 	"errors"
+	"hash"
 	"sync/atomic"
 )
 
@@ -54,7 +55,7 @@ func UseCKZG(use bool) error {
 	useCKZG.Store(use)
 
 	// Initializing the library can take 2-4 seconds - and can potentially crash
-	// on CKZG and non-ADX CPUs - so might as well so it now and don't wait until
+	// on CKZG and non-ADX CPUs - so might as well do it now and don't wait until
 	// a crypto operation is actually needed live.
 	if use {
 		ckzgIniter.Do(ckzgInit)
@@ -107,4 +108,22 @@ func VerifyBlobProof(blob Blob, commitment Commitment, proof Proof) error {
 		return ckzgVerifyBlobProof(blob, commitment, proof)
 	}
 	return gokzgVerifyBlobProof(blob, commitment, proof)
+}
+
+// CalcBlobHashV1 calculates the 'versioned blob hash' of a commitment.
+// The given hasher must be a sha256 hash instance, otherwise the result will be invalid!
+func CalcBlobHashV1(hasher hash.Hash, commit *Commitment) (vh [32]byte) {
+	if hasher.Size() != 32 {
+		panic("wrong hash size")
+	}
+	hasher.Reset()
+	hasher.Write(commit[:])
+	hasher.Sum(vh[:0])
+	vh[0] = 0x01 // version
+	return vh
+}
+
+// IsValidVersionedHash checks that h is a structurally-valid versioned blob hash.
+func IsValidVersionedHash(h []byte) bool {
+	return len(h) == 32 && h[0] == 0x01
 }
