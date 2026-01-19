@@ -26,37 +26,37 @@ import (
 // not verify whether the content of RawValues is valid RLP.
 type RawValue []byte
 
-var rawValueType = reflect.TypeOf(RawValue{})
+var rawValueType = reflect.TypeFor[RawValue]()
 
 // StringSize returns the encoded size of a string.
 func StringSize(s string) uint64 {
-	switch {
-	case len(s) == 0:
+	switch n := len(s); n {
+	case 0:
 		return 1
-	case len(s) == 1:
+	case 1:
 		if s[0] <= 0x7f {
 			return 1
 		} else {
 			return 2
 		}
 	default:
-		return uint64(headsize(uint64(len(s))) + len(s))
+		return uint64(headsize(uint64(n)) + n)
 	}
 }
 
 // BytesSize returns the encoded size of a byte slice.
 func BytesSize(b []byte) uint64 {
-	switch {
-	case len(b) == 0:
+	switch n := len(b); n {
+	case 0:
 		return 1
-	case len(b) == 1:
+	case 1:
 		if b[0] <= 0x7f {
 			return 1
 		} else {
 			return 2
 		}
 	default:
-		return uint64(headsize(uint64(len(b))) + len(b))
+		return uint64(headsize(uint64(n)) + n)
 	}
 }
 
@@ -105,18 +105,20 @@ func SplitUint64(b []byte) (x uint64, rest []byte, err error) {
 	if err != nil {
 		return 0, b, err
 	}
-	switch {
-	case len(content) == 0:
+	switch n := len(content); n {
+	case 0:
 		return 0, rest, nil
-	case len(content) == 1:
+	case 1:
 		if content[0] == 0 {
 			return 0, b, ErrCanonInt
 		}
 		return uint64(content[0]), rest, nil
-	case len(content) > 8:
-		return 0, b, errUintOverflow
 	default:
-		x, err = readSize(content, byte(len(content)))
+		if n > 8 {
+			return 0, b, errUintOverflow
+		}
+
+		x, err = readSize(content, byte(n))
 		if err != nil {
 			return 0, b, ErrCanonInt
 		}
@@ -148,6 +150,40 @@ func CountValues(b []byte) (int, error) {
 		b = b[tagsize+size:]
 	}
 	return i, nil
+}
+
+// SplitListValues extracts the raw elements from the list RLP-encoding blob.
+func SplitListValues(b []byte) ([][]byte, error) {
+	b, _, err := SplitList(b)
+	if err != nil {
+		return nil, err
+	}
+	n, err := CountValues(b)
+	if err != nil {
+		return nil, err
+	}
+	var elements = make([][]byte, 0, n)
+
+	for len(b) > 0 {
+		_, tagsize, size, err := readKind(b)
+		if err != nil {
+			return nil, err
+		}
+		elements = append(elements, b[:tagsize+size])
+		b = b[tagsize+size:]
+	}
+	return elements, nil
+}
+
+// MergeListValues takes a list of raw elements and rlp-encodes them as list.
+func MergeListValues(elems [][]byte) ([]byte, error) {
+	w := NewEncoderBuffer(nil)
+	offset := w.List()
+	for _, elem := range elems {
+		w.Write(elem)
+	}
+	w.ListEnd(offset)
+	return w.ToBytes(), nil
 }
 
 func readKind(buf []byte) (k Kind, tagsize, contentsize uint64, err error) {

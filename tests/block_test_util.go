@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	stdmath "math"
 	"math/big"
 	"os"
 	"reflect"
@@ -34,14 +35,15 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
-	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
+	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/ethereum/go-ethereum/triedb/hashdb"
+	"github.com/ethereum/go-ethereum/triedb/pathdb"
 )
 
 // A BlockTest checks handling of entire blocks.
@@ -57,8 +59,8 @@ func (t *BlockTest) UnmarshalJSON(in []byte) error {
 type btJSON struct {
 	Blocks     []btBlock             `json:"blocks"`
 	Genesis    btHeader              `json:"genesisBlockHeader"`
-	Pre        core.GenesisAlloc     `json:"pre"`
-	Post       core.GenesisAlloc     `json:"postState"`
+	Pre        types.GenesisAlloc    `json:"pre"`
+	Post       types.GenesisAlloc    `json:"postState"`
 	BestBlock  common.UnprefixedHash `json:"lastblockhash"`
 	Network    string                `json:"network"`
 	SealEngine string                `json:"sealEngine"`
@@ -109,27 +111,34 @@ type btHeaderMarshaling struct {
 	ExcessBlobGas *math.HexOrDecimal64
 }
 
-func (t *BlockTest) Run(snapshotter bool, scheme string, tracer vm.EVMLogger, postCheck func(error, *core.BlockChain)) (result error) {
+func (t *BlockTest) Run(snapshotter bool, scheme string, witness bool, tracer *tracing.Hooks, postCheck func(error, *core.BlockChain)) (result error) {
 	config, ok := Forks[t.json.Network]
 	if !ok {
 		return UnsupportedForkError{t.json.Network}
 	}
+
 	// import pre accounts & construct test genesis block & state root
+	// Commit genesis state
 	var (
+		gspec = t.genesis(config)
 		db    = rawdb.NewMemoryDatabase()
-		tconf = &trie.Config{
+		tconf = &triedb.Config{
 			Preimages: true,
+			IsVerkle:  gspec.Config.VerkleTime != nil && *gspec.Config.VerkleTime <= gspec.Timestamp,
 		}
 	)
-	if scheme == rawdb.PathScheme {
+	if scheme == rawdb.PathScheme || tconf.IsVerkle {
 		tconf.PathDB = pathdb.Defaults
 	} else {
 		tconf.HashDB = hashdb.Defaults
 	}
-	// Commit genesis state
-	gspec := t.genesis(config)
-	triedb := trie.NewDatabase(db, tconf)
-	gblock, err := gspec.Commit(db, triedb)
+
+	// if ttd is not specified, set an arbitrary huge value
+	if gspec.Config.TerminalTotalDifficulty == nil {
+		gspec.Config.TerminalTotalDifficulty = big.NewInt(stdmath.MaxInt64)
+	}
+	triedb := triedb.NewDatabase(db, tconf)
+	gblock, err := gspec.Commit(db, triedb, nil)
 	if err != nil {
 		return err
 	}
@@ -144,14 +153,21 @@ func (t *BlockTest) Run(snapshotter bool, scheme string, tracer vm.EVMLogger, po
 	// Wrap the original engine within the beacon-engine
 	engine := beacon.New(ethash.NewFaker())
 
-	cache := &core.CacheConfig{TrieCleanLimit: 0, StateScheme: scheme, Preimages: true}
-	if snapshotter {
-		cache.SnapshotLimit = 1
-		cache.SnapshotWait = true
+	options := &core.BlockChainConfig{
+		TrieCleanLimit: 0,
+		StateScheme:    scheme,
+		Preimages:      true,
+		TxLookupLimit:  -1, // disable tx indexing
+		VmConfig: vm.Config{
+			Tracer:                  tracer,
+			StatelessSelfValidation: witness,
+		},
 	}
-	chain, err := core.NewBlockChain(db, cache, gspec, nil, engine, vm.Config{
-		Tracer: tracer,
-	}, nil, nil)
+	if snapshotter {
+		options.SnapshotLimit = 1
+		options.SnapshotWait = true
+	}
+	chain, err := core.NewBlockChain(db, gspec, engine, options)
 	if err != nil {
 		return err
 	}
@@ -179,11 +195,18 @@ func (t *BlockTest) Run(snapshotter bool, scheme string, tracer vm.EVMLogger, po
 	}
 	// Cross-check the snapshot-to-hash against the trie hash
 	if snapshotter {
-		if err := chain.Snapshots().Verify(chain.CurrentBlock().Root); err != nil {
-			return err
+		if chain.Snapshots() != nil {
+			if err := chain.Snapshots().Verify(chain.CurrentBlock().Root); err != nil {
+				return err
+			}
 		}
 	}
 	return t.validateImportedHeaders(chain, validBlocks)
+}
+
+// Network returns the network/fork name for this test.
+func (t *BlockTest) Network() string {
+	return t.json.Network
 }
 
 func (t *BlockTest) genesis(config *params.ChainConfig) *core.Genesis {
@@ -206,7 +229,7 @@ func (t *BlockTest) genesis(config *params.ChainConfig) *core.Genesis {
 }
 
 /*
-See https://github.com/ethereum/tests/wiki/Blockchain-Tests-II
+See https://ethereum-tests.readthedocs.io/en/latest/blockchain-ref.html
 
 	Whether a block is valid or not is a bit subtle, it's defined by presence of
 	blockHeader, transactions and uncleHeaders fields. If they are missing, the block is
@@ -243,7 +266,7 @@ func (t *BlockTest) insertBlocks(blockchain *core.BlockChain) ([]btBlock, error)
 		}
 		if b.BlockHeader == nil {
 			if data, err := json.MarshalIndent(cb.Header(), "", "  "); err == nil {
-				fmt.Fprintf(os.Stderr, "block (index %d) insertion should have failed due to: %v:\n%v\n",
+				fmt.Fprintf(os.Stdout, "block (index %d) insertion should have failed due to: %v:\n%v\n",
 					bi, b.ExpectException, string(data))
 			}
 			return nil, fmt.Errorf("block (index %d) insertion should have failed due to: %v",

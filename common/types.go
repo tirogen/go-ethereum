@@ -42,8 +42,8 @@ const (
 )
 
 var (
-	hashT    = reflect.TypeOf(Hash{})
-	addressT = reflect.TypeOf(Address{})
+	hashT    = reflect.TypeFor[Hash]()
+	addressT = reflect.TypeFor[Address]()
 
 	// MaxAddress represents the maximum possible address value.
 	MaxAddress = HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
@@ -70,6 +70,15 @@ func BigToHash(b *big.Int) Hash { return BytesToHash(b.Bytes()) }
 // HexToHash sets byte representation of s to hash.
 // If b is larger than len(h), b will be cropped from the left.
 func HexToHash(s string) Hash { return BytesToHash(FromHex(s)) }
+
+// IsHexHash verifies whether a string can represent a valid hex-encoded
+// Ethereum hash or not.
+func IsHexHash(s string) bool {
+	if has0xPrefix(s) {
+		s = s[2:]
+	}
+	return len(s) == 2*HashLength && isHex(s)
+}
 
 // Cmp compares two hashes.
 func (h Hash) Cmp(other Hash) int {
@@ -466,12 +475,23 @@ func isString(input []byte) bool {
 // UnmarshalJSON parses a hash in hex syntax.
 func (d *Decimal) UnmarshalJSON(input []byte) error {
 	if !isString(input) {
-		return &json.UnmarshalTypeError{Value: "non-string", Type: reflect.TypeOf(uint64(0))}
+		return &json.UnmarshalTypeError{Value: "non-string", Type: reflect.TypeFor[uint64]()}
 	}
-	if i, err := strconv.ParseInt(string(input[1:len(input)-1]), 10, 64); err == nil {
+	if i, err := strconv.ParseUint(string(input[1:len(input)-1]), 10, 64); err == nil {
 		*d = Decimal(i)
 		return nil
 	} else {
 		return err
 	}
+}
+
+type PrettyBytes []byte
+
+// TerminalString implements log.TerminalStringer, formatting a string for console
+// output during logging.
+func (b PrettyBytes) TerminalString() string {
+	if len(b) < 7 {
+		return fmt.Sprintf("%x", b)
+	}
+	return fmt.Sprintf("%#x...%x (%dB)", b[:3], b[len(b)-3:], len(b))
 }

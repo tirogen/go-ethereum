@@ -32,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/internal/utesting"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
-	"golang.org/x/crypto/sha3"
 )
 
 func (c *Conn) snapRequest(code uint64, msg any) (any, error) {
@@ -87,9 +86,9 @@ func (s *Suite) TestSnapGetAccountRange(t *utesting.T) {
 			root:         root,
 			startingHash: zero,
 			limitHash:    ffHash,
-			expAccounts:  86,
+			expAccounts:  67,
 			expFirst:     firstKey,
-			expLast:      common.HexToHash("0x445cb5c1278fdce2f9cbdb681bdd76c52f8e50e41dbd9e220242a69ba99ac099"),
+			expLast:      common.HexToHash("0x622e662246601dd04f996289ce8b85e86db7bb15bb17f86487ec9d543ddb6f9a"),
 			desc:         "In this test, we request the entire state range, but limit the response to 4000 bytes.",
 		},
 		{
@@ -97,9 +96,9 @@ func (s *Suite) TestSnapGetAccountRange(t *utesting.T) {
 			root:         root,
 			startingHash: zero,
 			limitHash:    ffHash,
-			expAccounts:  65,
+			expAccounts:  49,
 			expFirst:     firstKey,
-			expLast:      common.HexToHash("0x2e6fe1362b3e388184fd7bf08e99e74170b26361624ffd1c5f646da7067b58b6"),
+			expLast:      common.HexToHash("0x445cb5c1278fdce2f9cbdb681bdd76c52f8e50e41dbd9e220242a69ba99ac099"),
 			desc:         "In this test, we request the entire state range, but limit the response to 3000 bytes.",
 		},
 		{
@@ -107,9 +106,9 @@ func (s *Suite) TestSnapGetAccountRange(t *utesting.T) {
 			root:         root,
 			startingHash: zero,
 			limitHash:    ffHash,
-			expAccounts:  44,
+			expAccounts:  34,
 			expFirst:     firstKey,
-			expLast:      common.HexToHash("0x1c3f74249a4892081ba0634a819aec9ed25f34c7653f5719b9098487e65ab595"),
+			expLast:      common.HexToHash("0x2ef46ebd2073cecde499c2e8df028ad79a26d57bfaa812c4c6f7eb4c9617b913"),
 			desc:         "In this test, we request the entire state range, but limit the response to 2000 bytes.",
 		},
 		{
@@ -178,9 +177,9 @@ The server should return the first available account.`,
 			root:         root,
 			startingHash: firstKey,
 			limitHash:    ffHash,
-			expAccounts:  86,
+			expAccounts:  67,
 			expFirst:     firstKey,
-			expLast:      common.HexToHash("0x445cb5c1278fdce2f9cbdb681bdd76c52f8e50e41dbd9e220242a69ba99ac099"),
+			expLast:      common.HexToHash("0x622e662246601dd04f996289ce8b85e86db7bb15bb17f86487ec9d543ddb6f9a"),
 			desc: `In this test, startingHash is exactly the first available account key.
 The server should return the first available account of the state as the first item.`,
 		},
@@ -189,9 +188,9 @@ The server should return the first available account of the state as the first i
 			root:         root,
 			startingHash: hashAdd(firstKey, 1),
 			limitHash:    ffHash,
-			expAccounts:  86,
+			expAccounts:  67,
 			expFirst:     secondKey,
-			expLast:      common.HexToHash("0x4615e5f5df5b25349a00ad313c6cd0436b6c08ee5826e33a018661997f85ebaa"),
+			expLast:      common.HexToHash("0x66192e4c757fba1cdc776e6737008f42d50370d3cd801db3624274283bf7cd63"),
 			desc: `In this test, startingHash is after the first available key.
 The server should return the second account of the state as the first item.`,
 		},
@@ -227,9 +226,9 @@ server to return no data because genesis is older than 127 blocks.`,
 			root:         s.chain.RootAt(int(s.chain.Head().Number().Uint64()) - 127),
 			startingHash: zero,
 			limitHash:    ffHash,
-			expAccounts:  84,
+			expAccounts:  66,
 			expFirst:     firstKey,
-			expLast:      common.HexToHash("0x580aa878e2f92d113a12c0a3ce3c21972b03dbe80786858d49a72097e2c491a3"),
+			expLast:      common.HexToHash("0x729953a43ed6c913df957172680a17e5735143ad767bda8f58ac84ec62fbec5e"),
 			desc: `This test requests data at a state root that is 127 blocks old.
 We expect the server to have this state available.`,
 		},
@@ -287,7 +286,6 @@ a key before startingHash (wrong order). The server should return the first avai
 	}
 
 	for i, tc := range tests {
-		tc := tc
 		if i > 0 {
 			t.Log("\n")
 		}
@@ -430,7 +428,6 @@ of the test account. The server should return slots [2,3] (i.e. the 'next availa
 	}
 
 	for i, tc := range tests {
-		tc := tc
 		if i > 0 {
 			t.Log("\n")
 		}
@@ -527,7 +524,6 @@ func (s *Suite) TestSnapGetByteCodes(t *utesting.T) {
 	}
 
 	for i, tc := range tests {
-		tc := tc
 		if i > 0 {
 			t.Log("\n")
 		}
@@ -648,7 +644,7 @@ The server should reject the request.`,
 					0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8}},
 			},
 			nBytes:    5000,
-			expHashes: []common.Hash{common.HexToHash("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")},
+			expHashes: []common.Hash{types.EmptyCodeHash},
 		},
 
 		{
@@ -661,8 +657,8 @@ The server should reject the request.`,
 				// It's a bit unfortunate these are hard-coded, but the result depends on
 				// a lot of aspects of the state trie and can't be guessed in a simple
 				// way. So you'll have to update this when the test chain is changed.
-				common.HexToHash("0x3e963a69401a70224cbfb8c0cc2249b019041a538675d71ccf80c9328d114e2e"),
-				common.HexToHash("0xd0670d09cdfbf3c6320eb3e92c47c57baa6c226551a2d488c05581091e6b1689"),
+				common.HexToHash("0x5bdc0d6057b35642a16d27223ea5454e5a17a400e28f7328971a5f2a87773b76"),
+				common.HexToHash("0x0a76c9812ca90ffed8ee4d191e683f93386b6e50cfe3679c0760d27510aa7fc5"),
 				empty, empty, empty, empty, empty, empty, empty, empty, empty, empty, empty, empty,
 				empty, empty, empty, empty, empty, empty, empty, empty, empty, empty, empty, empty,
 				empty, empty, empty, empty, empty, empty, empty, empty, empty, empty, empty, empty,
@@ -682,8 +678,8 @@ The server should reject the request.`,
 			// be updated when the test chain is changed.
 			expHashes: []common.Hash{
 				empty,
-				common.HexToHash("0xd0670d09cdfbf3c6320eb3e92c47c57baa6c226551a2d488c05581091e6b1689"),
-				common.HexToHash("0x3e963a69401a70224cbfb8c0cc2249b019041a538675d71ccf80c9328d114e2e"),
+				common.HexToHash("0x0a76c9812ca90ffed8ee4d191e683f93386b6e50cfe3679c0760d27510aa7fc5"),
+				common.HexToHash("0x5bdc0d6057b35642a16d27223ea5454e5a17a400e28f7328971a5f2a87773b76"),
 			},
 		},
 
@@ -724,7 +720,6 @@ The server should reject the request.`,
 	}
 
 	for i, tc := range tests {
-		tc := tc
 		if i > 0 {
 			t.Log("\n")
 		}
@@ -905,7 +900,7 @@ func (s *Suite) snapGetByteCodes(t *utesting.T, tc *byteCodesTest) error {
 	// that the serving node is missing
 	var (
 		bytecodes = res.Codes
-		hasher    = sha3.NewLegacyKeccak256().(crypto.KeccakState)
+		hasher    = crypto.NewKeccakState()
 		hash      = make([]byte, 32)
 		codes     = make([][]byte, len(req.Hashes))
 	)
@@ -964,7 +959,7 @@ func (s *Suite) snapGetTrieNodes(t *utesting.T, tc *trieNodesTest) error {
 
 	// Cross reference the requested trienodes with the response to find gaps
 	// that the serving node is missing
-	hasher := sha3.NewLegacyKeccak256().(crypto.KeccakState)
+	hasher := crypto.NewKeccakState()
 	hash := make([]byte, 32)
 	trienodes := res.Nodes
 	if got, want := len(trienodes), len(tc.expHashes); got != want {

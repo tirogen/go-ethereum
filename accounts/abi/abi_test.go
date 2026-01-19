@@ -19,7 +19,6 @@ package abi
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -30,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/internal/testrand"
 )
 
 const jsondata = `
@@ -316,6 +316,38 @@ func TestCustomErrors(t *testing.T) {
 		}
 	}
 	check("MyError", "MyError(uint256)")
+}
+
+func TestCustomErrorUnpackIntoInterface(t *testing.T) {
+	t.Parallel()
+	errorName := "MyError"
+	json := fmt.Sprintf(`[{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"uint256","name":"balance","type":"uint256"}],"name":"%s","type":"error"}]`, errorName)
+	abi, err := JSON(strings.NewReader(json))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type MyError struct {
+		Sender  common.Address
+		Balance *big.Int
+	}
+
+	sender := testrand.Address()
+	balance := new(big.Int).SetBytes(testrand.Bytes(8))
+	encoded, err := abi.Errors[errorName].Inputs.Pack(sender, balance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := MyError{}
+	err = abi.UnpackIntoInterface(&result, errorName, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Sender != sender {
+		t.Errorf("expected %x got %x", sender, result.Sender)
+	}
+	if result.Balance.Cmp(balance) != 0 {
+		t.Errorf("expected %v got %v", balance, result.Balance)
+	}
 }
 
 func TestMultiPack(t *testing.T) {
@@ -1200,7 +1232,6 @@ func TestUnpackRevert(t *testing.T) {
 		{"4e487b7100000000000000000000000000000000000000000000000000000000000000ff", "unknown panic code: 0xff", nil},
 	}
 	for index, c := range cases {
-		index, c := index, c
 		t.Run(fmt.Sprintf("case %d", index), func(t *testing.T) {
 			t.Parallel()
 			got, err := UnpackRevert(common.Hex2Bytes(c.input))
@@ -1220,117 +1251,9 @@ func TestUnpackRevert(t *testing.T) {
 	}
 }
 
-func TestPackAutoType(t *testing.T) {
-	abiJSON := `[{"inputs":[{"internalType":"address","name":"creator","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"string","name":"uri","type":"string"},{"internalType":"uint96","name":"royaltyBPS","type":"uint96"}],"stateMutability":"nonpayable","type":"function","name":"mintThenTransfer","outputs":[{"internalType":"uint256","name":"_tokenID","type":"uint256"},{"internalType":"uint256","name":"_gasAfterMint","type":"uint256"}]}]`
-	contractAbi, err := JSON(strings.NewReader(abiJSON))
-	if err != nil {
+func TestInternalContractType(t *testing.T) {
+	jsonData := `[{"inputs":[{"components":[{"internalType":"uint256","name":"dailyLimit","type":"uint256"},{"internalType":"uint256","name":"txLimit","type":"uint256"},{"internalType":"uint256","name":"accountDailyLimit","type":"uint256"},{"internalType":"uint256","name":"minAmount","type":"uint256"},{"internalType":"bool","name":"onlyWhitelisted","type":"bool"}],"internalType":"struct IMessagePassingBridge.BridgeLimits","name":"bridgeLimits","type":"tuple"},{"components":[{"internalType":"uint256","name":"lastTransferReset","type":"uint256"},{"internalType":"uint256","name":"bridged24Hours","type":"uint256"}],"internalType":"struct IMessagePassingBridge.AccountLimit","name":"accountDailyLimit","type":"tuple"},{"components":[{"internalType":"uint256","name":"lastTransferReset","type":"uint256"},{"internalType":"uint256","name":"bridged24Hours","type":"uint256"}],"internalType":"struct IMessagePassingBridge.BridgeDailyLimit","name":"bridgeDailyLimit","type":"tuple"},{"internalType":"contract INameService","name":"nameService","type":"INameService"},{"internalType":"bool","name":"isClosed","type":"bool"},{"internalType":"address","name":"from","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"canBridge","outputs":[{"internalType":"bool","name":"isWithinLimit","type":"bool"},{"internalType":"string","name":"error","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint8","name":"decimals","type":"uint8"}],"name":"normalizeFrom18ToTokenDecimals","outputs":[{"internalType":"uint256","name":"normalized","type":"uint256"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint8","name":"decimals","type":"uint8"}],"name":"normalizeFromTokenTo18Decimals","outputs":[{"internalType":"uint256","name":"normalized","type":"uint256"}],"stateMutability":"pure","type":"function"}]`
+	if _, err := JSON(strings.NewReader(jsonData)); err != nil {
 		t.Fatal(err)
-	}
-
-	data, err := contractAbi.Pack(
-		"mintThenTransfer",
-		common.HexToAddress("0x0000000000000000000000000000000000000001"),
-		"0x0000000000000000000000000000000000000002",
-		"ipfs_url",
-		"3000",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !bytes.Equal(data, common.Hex2Bytes("dff856e00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000bb80000000000000000000000000000000000000000000000000000000000000008697066735f75726c000000000000000000000000000000000000000000000000")) {
-		t.Fatalf("Output mismatch")
-	}
-}
-
-func TestPackAutoType2(t *testing.T) {
-	abiJSON := `[{"inputs":[{"internalType":"address","name":"to","type":"address"},{"components":[{"internalType":"uint256","name":"tokenID","type":"uint256"},{"internalType":"addresspayable","name":"creator","type":"address"},{"internalType":"uint256","name":"expirationTime","type":"uint256"},{"internalType":"uint96","name":"royaltyBPS","type":"uint96"},{"internalType":"string","name":"uri","type":"string"}],"internalType":"structCoralNFT721.MintAndTransferVoucher","name":"voucher","type":"tuple"},{"internalType":"bytes","name":"signature","type":"bytes"}],"name":"mintAndTransferVoucher","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
-	contractAbi, err := JSON(strings.NewReader(abiJSON))
-	if err != nil {
-		t.Fatal(err)
-	}
-	expect := common.Hex2Bytes("a5fb825d000000000000000000000000d66f7415b641304abcf04ad698b04e2e76d06795000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000cbd6d31584f8e515397f9000000000000000000000000bd6d31584f8e515397f95196263d399c67f9271100000000000000000000000000000000000000000000000000000000684fe24f00000000000000000000000000000000000000000000000000000000000003e800000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000002e516d654c316e7236555335787155774e4d346558746266616374666e6f4c437866744e78754551374148336648590000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c00000000000000000000000000000000000000000000000000000000000000")
-
-	tokenID, _ := new(big.Int).SetString("15401651351421325860378617", 10)
-
-	voucher := struct {
-		TokenID        *big.Int
-		Creator        common.Address
-		ExpirationTime *big.Int
-		RoyaltyBPS     *big.Int
-		Uri            string
-	}{
-		TokenID:        tokenID,
-		Creator:        common.HexToAddress("0xBD6D31584f8E515397f95196263d399C67F92711"),
-		ExpirationTime: big.NewInt(1750065743),
-		RoyaltyBPS:     big.NewInt(1000),
-		Uri:            "QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
-	}
-	data, err := contractAbi.Pack(
-		"mintAndTransferVoucher",
-		common.HexToAddress("0xd66f7415b641304aBCf04AD698B04E2E76d06795"),
-		voucher,
-		common.Hex2Bytes("349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c"),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(data, expect) {
-		t.Fatalf("Output mismatch")
-	}
-
-	data, err = contractAbi.Pack(
-		"mintAndTransferVoucher",
-		"0xd66f7415b641304aBCf04AD698B04E2E76d06795",
-		[]any{
-			tokenID,
-			"0xBD6D31584f8E515397f95196263d399C67F92711",
-			"1750065743",
-			1000,
-			"QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
-		},
-		common.Hex2Bytes("349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c"),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(data, expect) {
-		t.Fatalf("Output mismatch")
-	}
-
-	arr := []any{
-		"mintAndTransferVoucher",
-		"0xd66f7415b641304aBCf04AD698B04E2E76d06795",
-		[]any{
-			"15401651351421325860378617",
-			"0xBD6D31584f8E515397f95196263d399C67F92711",
-			"1750065743",
-			"1000",
-			"QmeL1nr6US5xqUwNM4eXtbfactfnoLCxftNxuEQ7AH3fHY",
-		},
-		"349e4d82e8a80675a5b91f332a86776eec6b13e0097d93cd3ffed7f1565115875dfb87f328a23d57e64d7638d1df7ee32dde315581b89e3fef2df59e04d120031c",
-	}
-	data, err = contractAbi.Pack(arr[0].(string), arr[1:]...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(data, expect) {
-		t.Fatalf("Output mismatch")
-	}
-
-	out, err := json.Marshal(arr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var arr2 []any
-	if err := json.Unmarshal(out, &arr2); err != nil {
-		t.Fatal(err)
-	}
-	data, err = contractAbi.Pack(arr2[0].(string), arr2[1:]...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(data, expect) {
-		t.Fatalf("Output mismatch")
 	}
 }
