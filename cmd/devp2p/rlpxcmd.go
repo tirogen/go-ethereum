@@ -77,7 +77,11 @@ var (
 
 func rlpxPing(ctx *cli.Context) error {
 	n := getNodeArg(ctx)
-	fd, err := net.Dial("tcp", fmt.Sprintf("%v:%d", n.IP(), n.TCP()))
+	tcpEndpoint, ok := n.TCPEndpoint()
+	if !ok {
+		return errors.New("node has no TCP endpoint")
+	}
+	fd, err := net.Dial("tcp", tcpEndpoint.String())
 	if err != nil {
 		return err
 	}
@@ -105,7 +109,7 @@ func rlpxPing(ctx *cli.Context) error {
 		}
 		return fmt.Errorf("received disconnect message: %v", msg[0])
 	default:
-		return fmt.Errorf("invalid message code %d, expected handshake (code zero)", code)
+		return fmt.Errorf("invalid message code %d, expected handshake (code zero) or disconnect (code one)", code)
 	}
 	return nil
 }
@@ -139,9 +143,6 @@ type testParams struct {
 
 func cliTestParams(ctx *cli.Context) *testParams {
 	nodeStr := ctx.String(testNodeFlag.Name)
-	if nodeStr == "" {
-		exit(fmt.Errorf("missing -%s", testNodeFlag.Name))
-	}
 	node, err := parseNode(nodeStr)
 	if err != nil {
 		exit(err)
@@ -151,15 +152,6 @@ func cliTestParams(ctx *cli.Context) *testParams {
 		engineAPI: ctx.String(testNodeEngineFlag.Name),
 		jwt:       ctx.String(testNodeJWTFlag.Name),
 		chainDir:  ctx.String(testChainDirFlag.Name),
-	}
-	if p.engineAPI == "" {
-		exit(fmt.Errorf("missing -%s", testNodeEngineFlag.Name))
-	}
-	if p.jwt == "" {
-		exit(fmt.Errorf("missing -%s", testNodeJWTFlag.Name))
-	}
-	if p.chainDir == "" {
-		exit(fmt.Errorf("missing -%s", testChainDirFlag.Name))
 	}
 	return &p
 }

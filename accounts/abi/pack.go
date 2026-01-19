@@ -41,7 +41,16 @@ func packBytesSlice(bytes []byte, l int) ([]byte, error) {
 // t.
 func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 	switch t.T {
-	case IntTy, UintTy:
+	case UintTy:
+		// make sure to not pack a negative value into a uint type.
+		if reflectValue.Kind() == reflect.Ptr {
+			val := new(big.Int).Set(reflectValue.Interface().(*big.Int))
+			if val.Sign() == -1 {
+				return nil, errInvalidSign
+			}
+		}
+		return packNum(reflectValue)
+	case IntTy:
 		return packNum(reflectValue)
 	case StringTy:
 		v, ok := reflectValue.Interface().(string)
