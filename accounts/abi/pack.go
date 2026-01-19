@@ -49,9 +49,9 @@ func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 				return nil, errInvalidSign
 			}
 		}
-		return packNum(reflectValue), nil
+		return packNum(reflectValue)
 	case IntTy:
-		return packNum(reflectValue), nil
+		return packNum(reflectValue)
 	case StringTy:
 		v, ok := reflectValue.Interface().(string)
 		if !ok {
